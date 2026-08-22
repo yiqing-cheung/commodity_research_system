@@ -88,8 +88,8 @@ _HTML_TEMPLATE = r"""<!doctype html>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="广州期货交易所铂、钯仓单交互研究报告">
-  <title>PGM Inventory Monitor</title>
-  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <title>广期所铂/钯库存</title>
+  <script src="assets/vendor/plotly-2.35.2.min.js"></script>
   <style>
     :root {
       --bg: #07111f; --panel: #0d1b2d; --panel2: #10233a;
@@ -172,13 +172,10 @@ _HTML_TEMPLATE = r"""<!doctype html>
     <header>
       <div>
         <div class="eyebrow">GFEX · PGM RESEARCH</div>
-        <h1><span id="metalTitle">PT</span> Inventory Monitor</h1>
+        <h1>广期所铂/钯库存</h1>
         <p class="subtitle">国内铂族金属仓单结构与日度变化</p>
       </div>
         <div class="header-actions">
-          <a class="market-link" href="pt_trade.html">中国铂进出口 →</a>
-          <a class="market-link" href="nymex.html">NYMEX 海外库存 →</a>
-        <a class="market-link" href="nymex_spread.html">NYMEX 月差 →</a>
         <nav class="switch" aria-label="切换品种">
           <button type="button" data-metal="PT" class="active">PT 铂</button>
           <button type="button" data-metal="PD">PD 钯</button>
@@ -264,7 +261,6 @@ _HTML_TEMPLATE = r"""<!doctype html>
       const payload = DATA[metal];
       const rows = payload.analysis.slice().sort((a, b) => a["日期"].localeCompare(b["日期"]));
       const latest = rows[rows.length - 1];
-      document.getElementById("metalTitle").textContent = metal;
       document.querySelectorAll("[data-metal]").forEach(button => button.classList.toggle("active", button.dataset.metal === metal));
       document.getElementById("period").textContent = `${rows[0]["日期"]} — ${payload.latestDate}`;
       document.getElementById("warehousePeriod").textContent = `${payload.previousDate} → ${payload.latestDate}`;

@@ -191,6 +191,5 @@ class PTTradeHTMLGenerator:
         output = Path(output_file)
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(html, encoding="utf-8")
-        print(f"China platinum trade dashboard generated: {output}")
+        print(f"China precious-metal trade dashboard generated: {output}")
         return output
-

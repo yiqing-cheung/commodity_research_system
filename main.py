@@ -7,13 +7,19 @@ import pandas as pd
 from analysis.inventory import GFEXInventory
 from data_collection.nymex import update_nymex_csv
 from data_collection.nymex_spread import update_spread_csv
+from data_collection.comex_silver import update_comex_silver_csvs
 from data_collection.pt_trade import update_pt_trade_csv
+from data_collection.pd_trade import update_pd_trade_csv
 from report.data_generator import InventoryReportData
 from report.generator import ReportGenerator
 from report.html_generator import HTMLDashboardGenerator
 from report.nymex_html_generator import NYMEXHTMLDashboardGenerator
 from report.nymex_spread_html_generator import NYMEXSpreadHTMLGenerator
+from report.comex_silver_html_generator import COMEXSilverHTMLGenerator
 from report.pt_trade_html_generator import PTTradeHTMLGenerator
+from report.pt_balance_html_generator import PTBalanceHTMLGenerator
+from report.pd_trade_html_generator import PDTradeHTMLGenerator
+from report.pd_balance_html_generator import PDBalanceHTMLGenerator
 
 
 DATA_FOLDER = "data"
@@ -29,7 +35,7 @@ START_DATE = "2026-05-06"  # 仓单分析起始日期
 
 
 def update_nymex_sources(proxy=None):
-    """Update both NYMEX source CSV files before building reports."""
+    """Update NYMEX PGM and COMEX silver source CSV files before reports."""
 
     proxy = proxy or os.environ.get("NYMEX_PROXY") or "http://127.0.0.1:7890"
     print()
@@ -55,6 +61,17 @@ def update_nymex_sources(proxy=None):
         )
     except Exception as error:
         print(f"NYMEX spread update failed; existing CSV retained: {error}")
+
+    try:
+        update_comex_silver_csvs(
+            stock_csv=os.path.join(DATA_FOLDER, "comex_ag_stock.csv"),
+            settle_csv=os.path.join(DATA_FOLDER, "comex_ag_settle.csv"),
+            proxy=proxy,
+            timeout=60,
+            backup=True,
+        )
+    except Exception as error:
+        print(f"COMEX silver update failed; existing CSV files retained: {error}")
 
 def get_latest_date(csv_file):
     """
@@ -195,6 +212,8 @@ def main(
     nymex_proxy=None,
     update_trade=False,
     trade_month=None,
+    update_pd_trade=False,
+    pd_trade_month=None,
 ):
     os.makedirs(
         REPORT_FOLDER,
@@ -212,7 +231,18 @@ def main(
             backup=True,
         )
 
-    # Update overseas inventory, delivery and platinum calendar-spread data first.
+    if update_pd_trade:
+        print()
+        print("=" * 60)
+        print("Updating China palladium import/export data")
+        print("=" * 60)
+        update_pd_trade_csv(
+            data_folder=DATA_FOLDER,
+            trade_month=pd_trade_month,
+            backup=True,
+        )
+
+    # Update overseas PGM data plus COMEX silver stocks and settlements first.
     # Failures do not prevent reports from being rebuilt from the existing CSV files.
     update_nymex_sources(proxy=nymex_proxy)
 
@@ -311,6 +341,17 @@ def main(
         print(f"NYMEX spread dashboard generation failed: {error}")
 
     try:
+        silver_dashboard = COMEXSilverHTMLGenerator(
+            stock_csv=os.path.join(DATA_FOLDER, "comex_ag_stock.csv"),
+            settle_csv=os.path.join(DATA_FOLDER, "comex_ag_settle.csv"),
+        )
+        silver_dashboard.generate(
+            output_file=os.path.join("site", "pgm", "comex_silver.html")
+        )
+    except Exception as error:
+        print(f"COMEX silver dashboard generation failed: {error}")
+
+    try:
         trade_dashboard = PTTradeHTMLGenerator(
             import_csv=os.path.join(DATA_FOLDER, "pt_cn_import.csv"),
             export_csv=os.path.join(DATA_FOLDER, "pt_cn_export.csv"),
@@ -320,6 +361,41 @@ def main(
         )
     except Exception as error:
         print(f"China platinum trade dashboard generation failed: {error}")
+
+    try:
+        balance_dashboard = PTBalanceHTMLGenerator(
+            import_csv=os.path.join(DATA_FOLDER, "pt_cn_import.csv"),
+            export_csv=os.path.join(DATA_FOLDER, "pt_cn_export.csv"),
+            inventory_csv=os.path.join(DATA_FOLDER, "gfex_PT_warehouse_receipt.csv"),
+        )
+        balance_dashboard.generate(
+            output_file=os.path.join("site", "pgm", "pt_balance.html")
+        )
+    except Exception as error:
+        print(f"China platinum balance dashboard generation failed: {error}")
+
+    try:
+        pd_trade_dashboard = PDTradeHTMLGenerator(
+            import_csv=os.path.join(DATA_FOLDER, "pd_cn_import.csv"),
+            export_csv=os.path.join(DATA_FOLDER, "pd_cn_export.csv"),
+        )
+        pd_trade_dashboard.generate(
+            output_file=os.path.join("site", "pgm", "pd_trade.html")
+        )
+    except Exception as error:
+        print(f"China palladium trade dashboard generation failed: {error}")
+
+    try:
+        pd_balance_dashboard = PDBalanceHTMLGenerator(
+            import_csv=os.path.join(DATA_FOLDER, "pd_cn_import.csv"),
+            export_csv=os.path.join(DATA_FOLDER, "pd_cn_export.csv"),
+            inventory_csv=os.path.join(DATA_FOLDER, "gfex_PD_warehouse_receipt.csv"),
+        )
+        pd_balance_dashboard.generate(
+            output_file=os.path.join("site", "pgm", "pd_balance.html")
+        )
+    except Exception as error:
+        print(f"China palladium balance dashboard generation failed: {error}")
 
 
 if __name__ == "__main__":
@@ -349,13 +425,34 @@ if __name__ == "__main__":
             "month found in the source filenames is used."
         ),
     )
+    parser.add_argument(
+        "--update-pd-trade",
+        action="store_true",
+        help=(
+            "Merge the latest matching month-stamped Customs palladium "
+            "import/export CSV files into the palladium history files."
+        ),
+    )
+    parser.add_argument(
+        "--pd-trade-month",
+        help=(
+            "Palladium Customs data month in YYYYMM format. If omitted, the "
+            "latest month found in the source filenames is used."
+        ),
+    )
     arguments = parser.parse_args()
     if arguments.trade_month and not arguments.update_trade:
         parser.error("--trade-month must be used together with --update-trade")
+    if arguments.pd_trade_month and not arguments.update_pd_trade:
+        parser.error(
+            "--pd-trade-month must be used together with --update-pd-trade"
+        )
 
     main(
         update_date=arguments.update_date,
         nymex_proxy=arguments.nymex_proxy,
         update_trade=arguments.update_trade,
         trade_month=arguments.trade_month,
+        update_pd_trade=arguments.update_pd_trade,
+        pd_trade_month=arguments.pd_trade_month,
     )

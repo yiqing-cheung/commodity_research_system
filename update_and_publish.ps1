@@ -1,0 +1,122 @@
+$ErrorActionPreference = "Stop"
+Set-StrictMode -Version Latest
+
+$ProjectRoot = "E:\pgm_research_system_html_v2"
+$SourceDirectory = Join-Path $ProjectRoot "site\pgm"
+$WebsiteRepository = "E:\yiqing-cheung.github.io"
+$TargetDirectory = Join-Path $WebsiteRepository "research\reports"
+$PythonExecutable = "D:\anaconda3\envs\pgm\python.exe"
+$LogDirectory = Join-Path $ProjectRoot "logs"
+$LogFile = Join-Path $LogDirectory ("update_and_publish_{0}.log" -f (Get-Date -Format "yyyy-MM-dd"))
+
+function Invoke-Git {
+    param([Parameter(Mandatory = $true)][string[]]$Arguments)
+
+    & git -C $WebsiteRepository @Arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "Git command failed: git -C `"$WebsiteRepository`" $($Arguments -join ' ')"
+    }
+}
+
+function Invoke-GitWithRetry {
+    param(
+        [Parameter(Mandatory = $true)][string[]]$Arguments,
+        [int]$MaxAttempts = 5,
+        [int]$DelaySeconds = 300
+    )
+
+    for ($Attempt = 1; $Attempt -le $MaxAttempts; $Attempt++) {
+        Write-Host "[$(Get-Date -Format s)] Git attempt $Attempt of $MaxAttempts`: git $($Arguments -join ' ')"
+        & git -C $WebsiteRepository @Arguments
+        if ($LASTEXITCODE -eq 0) {
+            return
+        }
+
+        if ($Attempt -eq $MaxAttempts) {
+            throw "Git command failed after $MaxAttempts attempts: git -C `"$WebsiteRepository`" $($Arguments -join ' ')"
+        }
+
+        Write-Warning "Git connection failed. Waiting $DelaySeconds seconds before retrying."
+        Start-Sleep -Seconds $DelaySeconds
+    }
+}
+
+$ExpectedReports = @(
+    "index.html",
+    "nymex.html",
+    "nymex_spread.html",
+    "comex_silver.html",
+    "pt_trade.html",
+    "pd_trade.html",
+    "pt_balance.html",
+    "pd_balance.html"
+)
+
+New-Item -ItemType Directory -Path $LogDirectory -Force | Out-Null
+Start-Transcript -Path $LogFile -Append | Out-Null
+
+try {
+    Write-Host "[$(Get-Date -Format s)] Starting PGM update"
+
+    foreach ($RequiredPath in @($ProjectRoot, $WebsiteRepository, $PythonExecutable)) {
+        if (-not (Test-Path -LiteralPath $RequiredPath)) {
+            throw "Required path does not exist: $RequiredPath"
+        }
+    }
+
+    Push-Location $ProjectRoot
+    try {
+        & $PythonExecutable (Join-Path $ProjectRoot "main.py")
+        if ($LASTEXITCODE -ne 0) {
+            throw "main.py failed with exit code $LASTEXITCODE"
+        }
+    }
+    finally {
+        Pop-Location
+    }
+
+    foreach ($Report in $ExpectedReports) {
+        $ReportPath = Join-Path $SourceDirectory $Report
+        if (-not (Test-Path -LiteralPath $ReportPath -PathType Leaf)) {
+            throw "Expected report was not generated: $ReportPath"
+        }
+    }
+
+    Write-Host "[$(Get-Date -Format s)] Updating website repository"
+    Invoke-GitWithRetry @("pull", "--ff-only", "origin", "main")
+
+    New-Item -ItemType Directory -Path $TargetDirectory -Force | Out-Null
+    & robocopy $SourceDirectory $TargetDirectory /MIR /R:2 /W:5 /NFL /NDL /NP
+    $RobocopyExitCode = $LASTEXITCODE
+    if ($RobocopyExitCode -ge 8) {
+        throw "Robocopy failed with exit code $RobocopyExitCode"
+    }
+
+    Invoke-Git @("add", "--", "research/reports")
+
+    & git -C $WebsiteRepository diff --cached --quiet --exit-code
+    $DiffExitCode = $LASTEXITCODE
+    if ($DiffExitCode -eq 0) {
+        Write-Host "[$(Get-Date -Format s)] No new website file changes"
+    }
+    elseif ($DiffExitCode -eq 1) {
+        $CommitMessage = "Update PGM reports $(Get-Date -Format 'yyyy-MM-dd')"
+        Invoke-Git @("commit", "-m", $CommitMessage)
+    }
+    else {
+        throw "Unable to inspect staged changes (exit code $DiffExitCode)"
+    }
+
+    # Always push, even when there are no new file changes. This publishes a
+    # local commit left behind by an earlier network failure.
+    Invoke-GitWithRetry @("push", "origin", "main")
+
+    Write-Host "[$(Get-Date -Format s)] PGM website update published successfully"
+}
+catch {
+    Write-Error "[$(Get-Date -Format s)] Update failed: $($_.Exception.Message)"
+    exit 1
+}
+finally {
+    Stop-Transcript | Out-Null
+}

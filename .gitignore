@@ -11,6 +11,7 @@ __pycache__/
 
 report_data/charts/
 reports/
+site/pgm/_*_check.js
 
 .DS_Store
 Thumbs.db

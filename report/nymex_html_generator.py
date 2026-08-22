@@ -81,7 +81,7 @@ _HTML_TEMPLATE = r'''<!doctype html>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="description" content="NYMEX铂钯库存与注册仓单交互研究页面">
   <title>NYMEX PGM Inventory</title>
-  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <script src="assets/vendor/plotly-2.35.2.min.js"></script>
   <style>
     :root{--bg:#07111f;--panel:#0d1b2d;--panel2:#10233a;--text:#edf6ff;--muted:#89a0b8;--line:#213852;--cyan:#31d7c5;--gold:#f0bd63;--blue:#65a7ff;--green:#46d29a;--red:#ff7285}
     *{box-sizing:border-box}body{margin:0;color:var(--text);background:radial-gradient(circle at 8% 0%,#12314b 0,transparent 32%),radial-gradient(circle at 100% 10%,#232746 0,transparent 30%),var(--bg);font-family:Inter,"Segoe UI","Microsoft YaHei",sans-serif}
