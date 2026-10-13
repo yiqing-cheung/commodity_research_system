@@ -204,11 +204,15 @@ def fetch_gfex_warehouse_receipt(
     rows = payload.get("data") or []
 
     # 接口同时返回“总计”和“品种小计”。
-    # 仓库明细行具有 genDate，并且 varietyOrder 是品种代码。
+    # 旧版返回结果包含 genDate，新版接口可能省略该字段；请求参数本身
+    # 已限定日期，因此仅在 genDate 存在时校验它，避免误删有效仓库明细。
     detail_rows = [
         row
         for row in rows
-        if str(row.get("genDate") or "") == date
+        if (
+            not str(row.get("genDate") or "").strip()
+            or str(row.get("genDate")).replace("-", "") == date
+        )
         and str(
             row.get("varietyOrder") or ""
         ).lower() == metal.lower()
